@@ -4,34 +4,44 @@ from flask_cors import CORS
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
 
-# Sample data (simulating a database)
-POSTS = [
+# Internal data storage
+POSTS_DATA = [
     {"id": 1, "title": "First", "content": "This is the first post."},
     {"id": 2, "title": "Second", "content": "This is the second post."},
     {"id": 3, "title": "Third", "content": "This is the third post."}
 ]
 
-
-def get_all_posts():
-    return POSTS
-
+# Utility function to retrieve posts
+def get_posts_data():
+    """Returns the current list of posts."""
+    return POSTS_DATA
 
 def find_post_by_id(post_id):
-    return next((p for p in POSTS if p["id"] == post_id), None)
-
-
+    """Finds a post by ID."""
+    return next((p for p in get_posts_data() if p["id"] == post_id), None)
 
 def add_new_post(title, content):
-    new_id = max((post["id"] for post in POSTS), default=0) + 1
+    """Adds a new post and returns the created post."""
+    posts = get_posts_data()
+    new_id = max((post["id"] for post in posts), default=0) + 1
     new_post = {"id": new_id, "title": title, "content": content}
-    POSTS.append(new_post)
+    posts.append(new_post)
     return new_post
 
 def remove_post(post_id):
-    global POSTS
-    POSTS = [p for p in POSTS if p["id"] != post_id]
-    return POSTS
+    """Removes a post and returns the updated list."""
+    posts = get_posts_data()
+    updated_posts = [p for p in posts if p["id"] != post_id]
+    posts.clear()
+    posts.extend(updated_posts)  # Updates in place to keep reference
+    return updated_posts
 
+def update_existing_post(post_id, new_data):
+    """Updates an existing post by merging with new data."""
+    post = find_post_by_id(post_id)
+    if post:
+        post.update(new_data)
+    return post
 
 @app.route('/api/posts', methods=['GET'])
 def get_posts():
@@ -48,11 +58,10 @@ def get_posts():
     if sort_direction and sort_direction not in valid_directions:
         return jsonify({"error": "Invalid sort direction. Use 'asc' or 'desc'."}), 400
 
-    posts = get_all_posts()
+    posts = get_posts_data()
     sorted_posts = sorted(posts, key=lambda post: post.get(sort_field, ""), reverse=(sort_direction == 'desc')) if sort_field else posts
 
     return jsonify(sorted_posts), 200
-
 
 @app.route('/api/posts', methods=['POST'])
 def add_post():
@@ -63,7 +72,6 @@ def add_post():
 
     new_post = add_new_post(data["title"], data["content"])
     return jsonify(new_post), 201
-
 
 @app.route('/api/posts/<int:post_id>', methods=['DELETE'])
 def delete_post(post_id):
@@ -76,21 +84,16 @@ def delete_post(post_id):
     remove_post(post_id)
     return jsonify({"message": f"Post {post_id} deleted."}), 200
 
-
 @app.route('/api/posts/<int:post_id>', methods=['PUT'])
 def update_post(post_id):
     """Update a post by ID."""
     data = request.get_json()
-    post = find_post_by_id(post_id)
+    post = update_existing_post(post_id, data)
 
     if not post:
         return jsonify({"error": f"Post with ID {post_id} not found."}), 404
 
-    post["title"] = data.get("title", post["title"])
-    post["content"] = data.get("content", post["content"])
-
     return jsonify(post), 200
-
 
 @app.route('/api/posts/search', methods=['GET'])
 def search_posts():
@@ -99,7 +102,7 @@ def search_posts():
     content_query = request.args.get('content', '').lower()
 
     filtered_posts = [
-        post for post in get_all_posts()
+        post for post in get_posts_data()
         if (title_query in post["title"].lower() if title_query else True) and
            (content_query in post["content"].lower() if content_query else True)
     ]
@@ -108,6 +111,3 @@ def search_posts():
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=5002, debug=True)
-
-
-
